@@ -36,7 +36,8 @@ import {
   RefreshCw,
   FileSpreadsheet,
   Share,
-  Image
+  Image,
+  Printer
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, parseISO, differenceInMinutes } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -139,6 +140,7 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
   const [reportData, setReportData] = useState<AttendanceRecord[]>([]);
   const invoiceRef = useRef<HTMLDivElement | null>(null);
   const [pdfWidthMode, setPdfWidthMode] = useState<'compact' | 'fit' | 'wide' | 'xwide'>('fit');
+  const [pdfOrientation, setPdfOrientation] = useState<'portrait' | 'landscape'>('landscape');
 
   // Function to validate department selection
   const validateDepartment = (departmentId: string): Department | { id: 'all', name: 'All Departments' } | null => {
@@ -731,10 +733,11 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
         return;
       }
 
-      // Initialize PDF with A4 landscape for optimal standard printing
-      const doc = new jsPDF('landscape', 'mm', 'a4');
-      const pageWidth = 297;  // A4 landscape width in mm
-      const pageHeight = 210; // A4 landscape height in mm
+      // Initialize PDF with selected orientation
+      const isLandscape = pdfOrientation === 'landscape';
+      const doc = new jsPDF(pdfOrientation, 'mm', 'a4');
+      const pageWidth = isLandscape ? 297 : 210;  // A4 width in mm
+      const pageHeight = isLandscape ? 210 : 297; // A4 height in mm
       const margin = { top: 15, bottom: 15, left: 10, right: 10 };  // Equal margins for balanced layout
       const contentWidth = pageWidth - (margin.left + margin.right);  // Available width for content
       
@@ -995,18 +998,18 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
               overflow: 'linebreak',  // Handle text overflow
             },
                       columnStyles: {
-            0: { cellWidth: 23 },  // Date
-            1: { cellWidth: 40 },  // Employee Name
-            2: { cellWidth: 35 },  // Department
-            3: { cellWidth: 23 },  // Roster Start
-            4: { cellWidth: 23 },  // First In
-            5: { cellWidth: 23 },  // First Out
-            6: { cellWidth: 23 },  // Second In
-            7: { cellWidth: 23 },  // Second Out
-            8: { cellWidth: 23 },  // Break
-            9: { cellWidth: 23 },  // Hours
+            0: { cellWidth: 20 },  // Date
+            1: { cellWidth: 35 },  // Employee Name
+            2: { cellWidth: 30 },  // Department
+            3: { cellWidth: 20 },  // Roster Start
+            4: { cellWidth: 20 },  // First In
+            5: { cellWidth: 20 },  // First Out
+            6: { cellWidth: 20 },  // Second In
+            7: { cellWidth: 20 },  // Second Out
+            8: { cellWidth: 20 },  // Break
+            9: { cellWidth: 20 },  // Hours
             10: { 
-              cellWidth: 25,  // Late
+              cellWidth: 22,  // Late
               fontStyle: 'bold',
               fontSize: baseFontSize,
               textColor: (cell) => {
@@ -1014,7 +1017,7 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
                 return value.startsWith('LATE:') ? [220, 38, 38] : [46, 125, 50];
               }
             },
-            11: { cellWidth: 25 }  // Status
+            11: { cellWidth: 30 }  // Status - Increased width for better visibility
           },
           headStyles: {
             fillColor: [41, 128, 185],
@@ -1341,6 +1344,200 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
       });
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handlePrint = async () => {
+    try {
+      setLoading(true);
+      const attendanceData = await fetchAttendanceData();
+      if (!attendanceData || attendanceData.length === 0) {
+        return;
+      }
+
+      // Generate PDF with current orientation
+      const isLandscape = pdfOrientation === 'landscape';
+      const doc = new jsPDF(pdfOrientation, 'mm', 'a4');
+      const pageWidth = isLandscape ? 297 : 210;
+      const pageHeight = isLandscape ? 210 : 297;
+      const margin = { top: 15, bottom: 15, left: 10, right: 10 };
+      const contentWidth = pageWidth - (margin.left + margin.right);
+
+      // Optimize font sizes for current orientation
+      const baseFontSize = isLandscape ? 8 : 7;
+      const headerFontSize = isLandscape ? 11 : 10;
+
+      // Add header
+      const headerHeight = 25;
+      doc.setFillColor(41, 128, 185);
+      doc.rect(0, 0, pageWidth, headerHeight, 'F');
+      
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.3);
+      doc.line(margin.left, headerHeight - 1, pageWidth - margin.right, headerHeight - 1);
+      
+      // Title
+      doc.setFontSize(headerFontSize * 3);
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DUTCH TRAILS', pageWidth / 2, headerHeight * 0.35, { align: 'center' });
+
+      // Subtitle
+      doc.setFontSize(headerFontSize * 2);
+      doc.setFont('helvetica', 'normal');
+      doc.text('ATTENDANCE REPORT', pageWidth / 2, headerHeight * 0.6, { align: 'center' });
+
+      // Department
+      doc.setFontSize(headerFontSize * 1.5);
+      doc.text(
+        selectedDepartment === 'all' 
+          ? 'ALL DEPARTMENTS' 
+          : departments.find(d => d.id === selectedDepartment)?.name?.toUpperCase() || 'UNKNOWN DEPARTMENT',
+        pageWidth / 2,
+        headerHeight * 0.85,
+        { align: 'center' }
+      );
+
+      // Add date range and generation info
+      doc.setFontSize(baseFontSize);
+      doc.setTextColor(44, 62, 80);
+      const dateRange = `Period: ${format(startDate, 'dd/MM/yyyy')} - ${format(endDate, 'dd/MM/yyyy')}`;
+      const generatedAt = `Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+      const infoY = headerHeight + 10;
+      doc.text(dateRange, margin.left + 5, infoY);
+      doc.text(generatedAt, pageWidth - margin.right - 5, infoY, { align: 'right' });
+
+      // Add table
+      (doc as any).autoTable({
+        head: [['Date', 'Employee Name', 'Department', 'Roster Start', 'First In', 'First Out', 'Second In', 'Second Out', 'Break', 'Hours', 'Late', 'Status']],
+        body: attendanceData.map(record => {
+          // Calculate late duration
+          let lateDuration = '-';
+          if (record.first_check_in_time && record.roster) {
+            const calculation = calculateLateDuration(record.first_check_in_time, withDepartmentOverride(record.roster, record) as any);
+            if (calculation.isLate) {
+              lateDuration = `LATE: ${calculation.formattedLateDuration}`;
+            } else {
+              lateDuration = 'ON TIME';
+            }
+          } else if (record.minutes_late && record.minutes_late > 0) {
+            lateDuration = `LATE: ${formatDuration(record.minutes_late)}`;
+          } else {
+            lateDuration = 'ON TIME';
+          }
+
+          return [
+            format(new Date(record.date), 'dd/MM/yyyy'),
+            record.employee?.first_name && record.employee?.last_name 
+              ? `${record.employee.first_name} ${record.employee.last_name}`
+              : record.employee?.name || 'Unknown',
+            record.employee?.department?.name || '-',
+            getEffectiveRosterStart(record),
+            record.first_check_in_time ? format(new Date(record.first_check_in_time), 'HH:mm') : '-',
+            record.first_check_out_time ? format(new Date(record.first_check_out_time), 'HH:mm') : '-',
+            record.second_check_in_time ? format(new Date(record.second_check_in_time), 'HH:mm') : '-',
+            record.second_check_out_time ? format(new Date(record.second_check_out_time), 'HH:mm') : '-',
+            formatDuration(record.break_duration_minutes),
+            formatDuration(record.working_duration_minutes),
+            lateDuration.replace('LATE: ', ''),
+            record.status?.toUpperCase() || 'UNKNOWN'
+          ];
+        }),
+        startY: headerHeight + 20,
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: baseFontSize,
+          cellPadding: 2,
+          lineColor: [180, 180, 180],
+          lineWidth: 0.1,
+          minCellHeight: 6,
+          valign: 'middle',
+          halign: 'center',
+          overflow: 'linebreak'
+        },
+        columnStyles: isLandscape ? {
+          0: { cellWidth: 23 },  // Date
+          1: { cellWidth: 40 },  // Employee Name
+          2: { cellWidth: 35 },  // Department
+          3: { cellWidth: 23 },  // Roster Start
+          4: { cellWidth: 23 },  // First In
+          5: { cellWidth: 23 },  // First Out
+          6: { cellWidth: 23 },  // Second In
+          7: { cellWidth: 23 },  // Second Out
+          8: { cellWidth: 23 },  // Break
+          9: { cellWidth: 23 },  // Hours
+          10: { 
+            cellWidth: 25,  // Late
+            fontStyle: 'bold',
+            textColor: (cell) => {
+              const value = cell.raw || '';
+              return value.startsWith('LATE:') ? [220, 38, 38] : [46, 125, 50];
+            }
+          },
+          11: { cellWidth: 25 }  // Status
+        } : {
+          0: { cellWidth: 16 },  // Date
+          1: { cellWidth: 22 },  // Employee Name
+          2: { cellWidth: 22 },  // Department
+          3: { cellWidth: 16 },  // Roster Start
+          4: { cellWidth: 14 },  // First In
+          5: { cellWidth: 14 },  // First Out
+          6: { cellWidth: 14 },  // Second In
+          7: { cellWidth: 14 },  // Second Out
+          8: { cellWidth: 14 },  // Break
+          9: { cellWidth: 14 },  // Hours
+          10: { 
+            cellWidth: 16,  // Late
+            fontStyle: 'bold',
+            textColor: (cell) => {
+              const value = cell.raw || '';
+              return value.startsWith('LATE:') ? [220, 38, 38] : [46, 125, 50];
+            }
+          },
+          11: { cellWidth: 24 }  // Status - Increased width for better visibility
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontSize: baseFontSize,
+          fontStyle: 'bold',
+          minCellHeight: 8,
+          valign: 'middle',
+          halign: 'center',
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        margin: { top: headerHeight + 20, bottom: margin.bottom, left: margin.left, right: margin.right },
+      });
+
+      // Add footer
+      doc.setFontSize(baseFontSize * 0.9);
+      doc.setTextColor(128, 128, 128);
+      const footerText = 'This report is system generated and does not require signature.';
+      const footerY = pageHeight - margin.bottom;
+      const pageInfo = `Page ${doc.getCurrentPageInfo().pageNumber} of ${doc.getNumberOfPages()}`;
+      doc.text(footerText, pageWidth / 2, footerY - 4, { align: 'center' });
+      doc.text(pageInfo, pageWidth / 2, footerY, { align: 'center' });
+
+      // Open print dialog
+      doc.autoPrint();
+      doc.output('dataurlnewwindow');
+
+      toast({
+        title: 'Success',
+        description: 'Print dialog opened',
+      });
+    } catch (error) {
+      console.error('Error printing report:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to print report',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1689,6 +1886,19 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Orientation:</label>
+                  <Select value={pdfOrientation} onValueChange={(value: 'portrait' | 'landscape') => setPdfOrientation(value)}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="landscape">Landscape</SelectItem>
+                      <SelectItem value="portrait">Portrait</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <Button
                   onClick={generatePDF}
                   disabled={loading || !startDate || !endDate}
@@ -1704,6 +1914,26 @@ export function PresentEmployeeReport({ className, onSuccess }: PresentEmployeeR
                     <>
                       <Download className="h-4 w-4" />
                       Download PDF
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={handlePrint}
+                  disabled={loading || !startDate || !endDate}
+                  className="flex items-center gap-2 w-full sm:w-auto"
+                  size="sm"
+                  variant="secondary"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Printing...
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="h-4 w-4" />
+                      Print Report
                     </>
                   )}
                 </Button>

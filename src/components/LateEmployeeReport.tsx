@@ -120,13 +120,29 @@ export function LateEmployeeReport({ className, onSuccess }: LateEmployeeReportP
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        const { data, error } = await supabase
+        // First ensure all departments exist
+        const { data: existingDepartments, error: deptError } = await supabase
           .from('departments')
           .select('id, name')
           .order('name');
 
-        if (error) throw error;
-        setDepartments(data || []);
+        if (deptError) throw deptError;
+
+        // Filter out any invalid departments
+        const validDepartments = (existingDepartments || []).filter(
+          dept => dept && dept.id && dept.name
+        );
+
+        if (validDepartments.length === 0) {
+          console.warn('No valid departments found');
+          toast({
+            title: 'Warning',
+            description: 'No departments found',
+            variant: 'default',
+          });
+        }
+
+        setDepartments(validDepartments);
       } catch (error) {
         console.error('Error fetching departments:', error);
         toast({
@@ -210,7 +226,7 @@ export function LateEmployeeReport({ className, onSuccess }: LateEmployeeReportP
               roster_start_time: roster.start_time,
               late_minutes: lateDurationCalc.lateMinutes,
               late_duration: lateDurationCalc.formattedLateDuration,
-              department: employee.department?.name || 'Unknown',
+              department: employee.departments?.name || employee.department?.name || 'Unassigned',
               position: employee.position || 'Unknown'
             });
           }
