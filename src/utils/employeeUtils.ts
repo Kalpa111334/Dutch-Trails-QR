@@ -60,6 +60,8 @@ type WithDepartment<T> = T & {
 export const getEmployees = async (): Promise<Employee[]> => {
   try {
     console.log('Fetching employees...');
+    
+    // First, try to get employees with departments
     const { data, error } = await supabase
       .from('employees')
       .select(`
@@ -82,8 +84,54 @@ export const getEmployees = async (): Promise<Employee[]> => {
       .eq('status', 'active') as SupabaseResponse<DatabaseEmployee[]>;
     
     if (error) {
-      console.error('Error fetching employees:', error);
-      throw new Error(`Failed to fetch employees: ${error.message}`);
+      console.error('Error fetching employees with departments:', error);
+      
+      // Fallback: try to get employees without department join
+      console.log('Trying fallback query without department join...');
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('employees')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          position,
+          join_date,
+          status,
+          department_id,
+          created_at,
+          updated_at
+        `)
+        .eq('status', 'active');
+      
+      if (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError);
+        throw new Error(`Failed to fetch employees: ${fallbackError.message}`);
+      }
+      
+      if (!fallbackData) {
+        console.log('No employees found in fallback query');
+        return [];
+      }
+      
+      console.log('Fetched employees via fallback:', fallbackData);
+      
+      // Transform fallback data
+      return fallbackData.map(emp => ({
+        id: emp.id,
+        first_name: emp.first_name || '',
+        last_name: emp.last_name || '',
+        email: emp.email,
+        department: 'Unknown',
+        phone: emp.phone,
+        position: emp.position,
+        join_date: emp.join_date || new Date().toISOString().split('T')[0],
+        status: emp.status as 'active' | 'inactive',
+        name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        created_at: emp.created_at,
+        updated_at: emp.updated_at
+      }));
     }
     
     if (!data) {
@@ -99,7 +147,7 @@ export const getEmployees = async (): Promise<Employee[]> => {
       first_name: emp.first_name || '',
       last_name: emp.last_name || '',
       email: emp.email,
-      department: emp.departments.name,
+      department: emp.departments?.name || 'Unknown',
       phone: emp.phone,
       position: emp.position,
       join_date: emp.join_date || new Date().toISOString().split('T')[0],
