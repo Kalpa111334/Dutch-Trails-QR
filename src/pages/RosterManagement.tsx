@@ -848,12 +848,21 @@ export default function RosterManagement() {
             // Default time slots if department not found or no specific time slot
             const defaultTimeSlots = {
               morning: { start_time: '09:00', end_time: '17:00' },
-              evening: { start_time: '17:00', end_time: '01:00' },
-              night: { start_time: '23:00', end_time: '07:00' }
+              evening: { start_time: '17:00', end_time: '23:59' },
+              night: { start_time: '22:00', end_time: '23:59' } // Adjusted to avoid overnight constraint violation
             };
             timeSlot = data.shift && data.shift !== 'off' ? defaultTimeSlots[data.shift] : defaultTimeSlots.morning;
           }
         }
+      }
+
+      // Ensure time constraint is satisfied: start_time < end_time
+      let startTime = timeSlot?.start_time || '09:00:00';
+      let endTime = timeSlot?.end_time || '17:00:00';
+      
+      // If start_time >= end_time, adjust end_time to be after start_time
+      if (startTime >= endTime) {
+        endTime = '23:59:00'; // Set to end of day
       }
 
       // Create the roster object
@@ -865,8 +874,8 @@ export default function RosterManagement() {
         description: `${data.rosterType.toUpperCase()} Roster - Created on ${format(new Date(), 'PPP')}`,
         start_date: format(data.startDate, 'yyyy-MM-dd'),
         end_date: format(data.endDate, 'yyyy-MM-dd'),
-        start_time: timeSlot?.start_time || '09:00:00',
-        end_time: timeSlot?.end_time || '17:00:00',
+        start_time: startTime,
+        end_time: endTime,
         break_start: '13:00:00',
         break_end: '14:00:00',
         break_duration: 60,
