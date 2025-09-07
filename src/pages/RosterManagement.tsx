@@ -859,17 +859,26 @@ export default function RosterManagement() {
       // Create the roster object
       const newRoster: Omit<Roster, 'id' | 'created_at' | 'updated_at'> = {
         employee_id: data.employee,
-        department_id: selectedDepartment || null,
+        department_id: selectedDepartment || '',
         position: selectedPosition || 'Unassigned',
+        name: `${data.rosterType.toUpperCase()} Roster - ${format(data.startDate, 'MMM dd')} to ${format(data.endDate, 'MMM dd')}`,
+        description: `${data.rosterType.toUpperCase()} Roster - Created on ${format(new Date(), 'PPP')}`,
         start_date: format(data.startDate, 'yyyy-MM-dd'),
         end_date: format(data.endDate, 'yyyy-MM-dd'),
+        start_time: timeSlot?.start_time || '09:00:00',
+        end_time: timeSlot?.end_time || '17:00:00',
+        break_start: '13:00:00',
+        break_end: '14:00:00',
+        break_duration: 60,
         shift_pattern: [{
           date: format(data.startDate, 'yyyy-MM-dd'),
           shift: data.rosterType === 'off' ? 'off' : (data.shift || 'morning'),
           time_slot: timeSlot
         }],
-        status: 'active',
         notes: `${data.rosterType.toUpperCase()} Roster - Created on ${format(new Date(), 'PPP')}`,
+        is_active: true,
+        status: 'active',
+        early_departure_threshold: 30,
       };
 
       console.log('Creating roster with data:', newRoster);
